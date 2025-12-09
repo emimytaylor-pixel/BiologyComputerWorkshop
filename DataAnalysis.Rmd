@@ -1,0 +1,642 @@
+---
+title: "Data Management and Analysis in R for Ecologists"
+output: html_notebook
+editor_options:
+  chunk_output_type: console
+---
+
+# Introduction to RStudio and Project Management
+
+Welcome to RStudio. For clarity, R refers to a programming language as well as 
+the software that runs R code. RStudio is a software interface that can make it 
+easier to interact with the R software. We are going to start with a brief 
+description of all the panes. Feel free to take notes here if you want. 
+
+
+
+At this point, we have covered version control with Git, and you should have 
+been able to clone this repository. This repository is set up as an R Project. 
+R Projects makes it easier to work on individual projects and is easier to 
+navigate, more reproducible, and easier to share with others. Your project 
+should start with a top-level folder that contains everything necessary for the 
+project, including data, scripts, and images, all organized into sub-folders.
+
+One of the benefits to using RStudio Projects is that they automatically set the
+working directory to the top-level folder for the project. The working directory 
+is the folder where R is working, so it views the location of all files (including
+data and scripts) as being relative to the working directory. You may come across 
+scripts that include something like `setwd("/Users/YourUserName/MyCoolProject")`, 
+which directly sets a working directory. This is usually much less portable, 
+since that specific directory might not be found on someone else’s computer 
+(they probably don’t have the same username as you). Using RStudio Projects 
+means we don’t have to deal with manually setting the working directory. Feel 
+free to take notes on how to set up R Projects here if you want. 
+
+
+
+### A quick note on reproducibility
+
+To improve the reproducibility of our work, we will stick to a few guidelines. 
+
+1. Never save and load your workspace. You can change those settings in the 
+options windows if needed. Reloading a workspace might sound convenient, but for 
+the sake of reproducibility, we want to start with a clean, empty R session every 
+time we work. That means that we have to record everything we do into scripts,
+save any data we need into files, and store outputs like images as files. We want 
+to get used to everything we generate in a single R session being disposable. We
+want our scripts to be able to regenerate things we need, other than 
+“raw materials” like data.  
+
+2. Speaking of data, we should keep our raw data pristine. In general, you want 
+to keep your raw data completely untouched, so once you put data into that folder,
+you do not modify it. Instead, you read it into R, and and manipulate and modify
+the data every time you go to re-run your analysis. If, for some reason, it takes
+a long time to modify and prep your data (e.g., you read in a big, remote
+database), then you can write that modified file into a separate `cleaned` 
+sub-folder of your `Data` folder. 
+
+3. We should keep our working script relatively short and clean by using and 
+sourcing other scripts. For example, if it takes over ~ 30 lines of code to 
+clean up and prep your data for analysis, that should be in a separate script
+that you then source with `source(Scripts/DataCleaning.R)`. 
+
+4. Using the console and scripts effectively. You want your code to live in a 
+script, but when you are trying out ideas it can be useful to use the console. 
+
+---
+
+# Workshop Roadmap
+
+In this workshop we’ll practice a complete data workflow in R:
+
+1. **Import raw data** from `.csv` files.
+2. **Inspect and clean** the data (types, missing values, typos).
+3. **Join multiple tables** using `dplyr` joins.
+4. **Create derived variables** with `mutate()`.
+5. **Summarize and reshape** data with `group_by()`, `summarise()`, and `pivot_*`.
+6. **Visualize** patterns with `ggplot2`.
+7. **Fit simple models** and interpret them in a biological context.
+
+We’ll start with built-in examples (`mpg`, `flights`) to practice the tools,
+then apply the same workflow to a simulated ecological data set.
+
+---
+
+# Data Manipulation with Tidyverse
+
+Arguably one of the most useful packages in R is tidyverse. Tidyverse contains a
+suite of packages including dplyr, purr, ggplot2, lubridate, tidyr, and stringr. 
+Personally, I use tidyverse packages every time I open R. 
+
+We are going to be primarily using tidyverse to clean and prep our data, 
+visualize our cleaned data, and make prediction plots of our results. So we are 
+going to start with (hopefully) a quick refresher on some key functions within
+the tidyverse package. 
+
+```{r}
+# Load the package
+# If you need to install the package, use `install.packages("tidyverse")` in the
+# console. 
+# Note that you NEVER want to have the install function in your R script. It is 
+# considered rude to potentially install packages on someone else's computer 
+# if they were to run your code. 
+library(tidyverse)
+
+# First we will look at our example database 
+head(mpg)
+
+# It is also important to check the structure of your data
+str(mpg)
+
+# We will order our data by year and highway mpg (hwy)
+# NOTE that this does not alter the saved object, only the current display 
+arrange(mpg, year, hwy)
+
+# This is the same as above
+mpg %>% arrange(year, hwy)
+
+# If we want our new order to stay, we can save it as such
+mpg <- mpg %>% arrange(year, hwy)
+head(mpg)
+
+```
+
+It is often necessary to extract an entire variable or set of variables or 
+observations. This is easily achieved with `filter()` for observations or 
+`select()` with variables.
+
+`filter()` allows you to subset observations based on their value. `select()` 
+allows you to extract certain variables for easy data sub setting.
+
+```{r}
+# See what manufacturers we have
+unique(mpg$manufacturer)
+
+# Subset the data to include only Dodge
+mpg %>%
+  filter(manufacturer == "dodge")
+
+# Filter out all but audi
+mpg %>%
+  filter(manufacturer != "audi")
+
+# We want to know which cars get at least 20 mpg in the city
+mpg %>%
+  filter(cty >= 20)
+
+# If we want Dodge or Ford manufacturers we use |
+mpg %>% 
+  filter(manufacturer == "dodge" | manufacturer == "ford")
+
+# This won't work, because a manufacuter cannot be both Dodge and Ford
+mpg %>% 
+  filter(manufacturer == "dodge", manufacturer == "ford")
+
+# Here is a shorthand. This will select every row where manufacturer is one of the
+# values in the c() function
+mpg %>%
+  filter(manufacturer %in% c("dodge", "ford"))
+
+# You can also randomly select a percentage or set number of rows
+mpg %>%
+  sample_n(25, replace = FALSE)
+
+# Sometimes we might want to subset observations containing a particular 
+# sequence of letters. In our mpg data set, there are many different models that 
+# contain "4wd", more than we would want to write out.
+unique(mpg$model)
+
+# Use the power of stringr
+mpg %>% 
+  filter(str_detect(model,'4wd')) 
+
+
+# We can select certain variables by name
+mpg %>%
+  select(model, displ, hwy)
+
+# We can select all but named variables
+mpg %>%
+  select(-model, -year, -hwy)
+
+# We can select all columns from 2:6, we could also do that by name
+mpg %>%
+  select(2:6)
+
+# Select variables that contain "y"
+mpg %>% 
+  select(contains('y'))
+
+# Select can also be used to rearrange your data
+mpg %>% select(class, displ, year, everything())
+
+```
+
+It is often necessary to create new variables, either from scratch or conditional 
+on other variables. In the tidyverse package, `mutate()` will add new columns at
+the end of your data set. We will start by subsetting an example data set.
+
+```{r}
+# Load package with flights data
+library(nycflights13)
+(sml_flights <- select(flights, year:day, ends_with("delay"), distance, 
+                       air_time))
+
+# Now create new columns using mutate()
+sml_flights %>%
+  mutate(gain = dep_delay - arr_delay, 
+         hours = air_time / 60, 
+         gain_per_hour = gain / hours)
+
+# If you only want to keep the new variable, use transmute()
+sml_flights %>%
+  transmute(gain = dep_delay - arr_delay, 
+         hours = air_time / 60, 
+         gain_per_hour = gain / hours)
+
+# Use case_when if the new variable is based on certain conditions
+flights %>%
+  transmute(dep_time, 
+            hour = dep_time %/% 100, 
+            minute = dep_time %% 100, 
+            time_category = case_when(
+              hour <= 8 ~ "early", 
+              hour > 8 & hour <= 18 ~ "good", 
+              hour > 18 ~ "late"
+            )) %>%
+  sample_n(20, replace = FALSE)
+```
+
+Calculating data summary statistics is also necessary. This is easily achieved 
+with `summarise()` and also helper functions like `group_by()` or `n()`. 
+
+
+```{r}
+# summarise() will collapse data to a single row:
+summarise(flights, 
+          mean_delay = mean(dep_delay, na.rm = TRUE), 
+          sd_delay = sd(dep_delay, na.rm = TRUE),
+          min_delay = min(dep_delay, na.rm = TRUE),
+          max_delay = max(dep_delay, na.rm = TRUE),
+          distinct_delay = n_distinct(dep_delay),
+          nrow = n())
+
+
+# The utility of summarise() isn't fully realized until you pair it with 
+# group_by(). This changes the unit of analysis from the complete data set to 
+# the group. Then, you can apply functions to the group.
+
+# Get average delay stats per day. Each unique group gets it's own row
+flights %>% 
+  group_by(year, month, day) %>%
+  summarise(mean_delay = mean(dep_delay, na.rm = TRUE), 
+          sd_delay = sd(dep_delay, na.rm = TRUE),
+          min_delay = min(dep_delay, na.rm = TRUE),
+          max_delay = max(dep_delay, na.rm = TRUE),
+          distinct_delay = n_distinct(dep_delay),
+          nrow = n())
+
+# Find the number of flights that were early each day
+flights %>%
+  mutate(dep_time, 
+            hour = dep_time %/% 100, 
+            minute = dep_time %% 100, 
+            time_category = case_when(
+              hour <= 8 ~ "early", 
+              hour > 8 & hour <= 18 ~ "good", 
+              hour > 18 ~ "late"
+            )) %>%
+  group_by(year, month, day, time_category) %>%
+  summarise(n_cat = n())
+
+```
+
+
+When working with grouped data, you can use `ungroup()` to strip away all groups 
+and apply functions to the data set as a whole and not by group. `group_by()` 
+can be combined with all other tidyverse functions such as `mutate()` and 
+`filter()`.
+
+```{r}
+
+# Worst delays for each group
+sml_flights %>% 
+  group_by(year, month, day) %>%
+  filter(rank(desc(arr_delay)) < 10)
+
+# Groups bigger than threashold
+flights %>%
+  group_by(dest) %>%
+  filter(n() > 365) %>%
+  select(dest, everything())
+
+# Then standardize to compare group stats
+flights %>%
+  group_by(dest) %>%
+  filter(n() > 365) %>%
+  filter(arr_delay > 0) %>%
+  mutate(prop_delay = arr_delay / sum(arr_delay)) %>%
+  select(year:day, dest, arr_delay, prop_delay)
+
+```
+
+Other ways to create new variables is by separating or uniting existing variables. 
+`separate()` pulls apart one column into multiple columns by splitting based on 
+a separator character or regex.
+
+```{r}
+table3
+
+# Now split the rate into cases and population size
+table3 %>%
+  separate(col = rate, into = c("cases", "population"))
+
+# Notice that cases and population are character columns. We can include convert=TRUE
+table3 %>%
+  separate(col = rate, into = c("cases", "population"), convert = TRUE)
+
+# Separate by position
+table3 %>%
+  separate(year, into = c("century", "decade"), sep = 2, convert = TRUE)
+
+# Now for a more complicated example. Lets create a super messy data set, and 
+# clean it up.
+messy_data <- data.frame(
+  state = sample(c("TN", "KY", "GA", "AL"), size = 40, replace = TRUE, 
+                  prob = c(0.3, 0.2, 0.25, 0.25)), 
+  ID = 1:40, 
+  w1 = round(runif(40, 10, 900), 0), 
+  w2 = round(runif(40, 10, 900), 0),
+  w3 = sample(c(round(runif(1, 10, 900), 0), NA), size = 40, replace = TRUE, 
+              prob = c(0.8, 0.2)),
+  w4 = sample(c(round(runif(1, 10, 900), 0), NA), size = 40, replace = TRUE, 
+              prob = c(0.4, 0.6))) %>%
+  unite(wgt, starts_with("w"), sep = ",", na.rm = TRUE) %>%
+  unite(dat, state, ID, wgt, sep = "_")
+
+# View the data
+messy_data %>%
+  head()
+
+# Now separte our state, ID, and weights
+messy_data %>%
+  separate(dat, into = c("State", "ID", "Wgts"), sep = "_") %>%
+  head()
+
+# Now we are going str_split() to split our strings, it will create a list of 
+# our splits
+messy_data %>%
+  separate(dat, into = c("State", "ID", "Wgts"), sep = "_") %>%
+  separate(Wgts, into = c("w1", "w2", "w3", "w4"), sep = ",") %>%
+  head()
+
+# The opposite of `separate()` is `unite()`, which combines multiple columns 
+# into a single column. It is most useful if you want to combine multiple fields 
+# (like capture year, capture number, and sex) to create unique and informative 
+# ID numbers.
+table5
+
+# The default unites with the _ as a separator
+table5 %>% 
+  unite(new, century, year)
+
+# But you can change that to whatever you want
+table5 %>% 
+  unite(new, century, year, sep = "")
+
+```
+
+Most analyses will involve multiple tables or excel sheets of data. Maybe you 
+have one file with a list of ID numbers and individual characteristics like sex,
+age, capture date, etc. You might have a separate file with all the recaptures 
+for every individual that doesn't include all the individual characteristics. 
+These multiple excel tables are relational data and can be joined to combine the
+information contained in them.
+
+We will dive into joins using the nycflights13 data that contains 4 tibbles. 
+
+```{r}
+# Airline companies
+head(airlines)
+
+# Airports
+head(airports)
+
+# Plane details
+head(planes)
+
+# Weather
+head(weather)
+
+# Work with a subset of flights
+flights2 <- flights %>% 
+  select(year:day, hour, origin, dest, tailnum, carrier)
+head(flights2)
+
+# Add the full airline number
+flights2 %>%
+  select(-origin, - dest) %>%
+  left_join(airlines, by = "carrier")
+
+# If you don't define the key (i.e., the `by` argument), then it uses all column 
+# names that match to generate the key.
+flights2 %>% 
+  left_join(weather)
+
+# If the key doesn't have matching column names, you can used a named character 
+# vector, e.g., by = c("a" = "b") which will match x$a to y$b.
+flights2 %>% 
+  left_join(airports, c("dest" = "faa"))
+
+
+```
+
+Reshaping data is another important concept to grasp to be able to work 
+effectively in R. Data can be organized in different ways, and some can be easier 
+to use than others. Each data set below contains the same data and 4 variables 
+(country, year, population size, # cases), but organized differently.
+
+```{r}
+table1
+table2
+table3
+
+# Make table1 look like table2
+table1 %>% 
+  pivot_longer(cols = c(cases, population), names_to = "type", 
+               values_to = "count")
+
+# Make table2 look like table1
+table2 %>%
+  pivot_wider(names_from = type, values_from = count)
+
+
+```
+
+---
+
+# Applying the Workflow to an Ecological Study
+
+So far, we have practiced: 
+- Filtering, selecting, and arranging rows/columns  
+- Creating new variables with `mutate()` / `case_when()`  
+- Summarizing and grouping data  
+- Joining and reshaping data  
+
+Now we will use those same tools on a small ecological project: a study of 
+**nifflers** and how their body size and treasure-finding ability relate to 
+recruitment of offspring. 
+
+
+## Niffler Study Background
+
+In this fictional study from the magical wizarding world of Harry Potter, 
+ecologists:
+
+- Captured wild nifflers, weighed them, aged them, and recorded sex and 
+capture date.
+- Fitted them with GPS tags and tracked **weekly treasure haul** (grams of 
+treasure collected).
+- For female nifflers, recorded **number of offspring per year**.
+
+Biological assumptions (baked into the simulated data):
+
+- Heavier nifflers tend to collect more treasure each week.
+- Treasure haul is noisy (luck and environment play a role).
+- For females, higher treasure haul (better condition) tends to increase 
+recruitment.
+
+We’ll work with **three tables**: capture data, treasure data, and recruitment
+data. Our goal is to manage and analyze these data using good, reproducible 
+workflows.
+
+Questions we’ll explore:
+
+1. How does **weight** relate to **treasure haul**?
+2. Do **males and females** differ in treasure haul?
+3. For females, how does **mean treasure haul** relate to **number of offspring**?
+
+
+## Niffler Data Files
+
+The repository contains three `.csv` files in `Data/`:
+
+1. **Capture data**: `nifflers_capture.csv`  
+   One row per individual niffler.
+   - `id`           — unique niffler ID (character)
+   - `capture_date` — date of first capture (Date)
+   - `sex`          — "F" or "M"
+   - `age`    — age at capture (years)
+   - `weight_g`     — body mass at capture (grams)
+   - `site`         — capture location (e.g., "Gringotts", "Hogsmeade", "ForbiddenForest")
+
+2. **Treasure data**: `nifflers_treasure.csv`  
+   Multiple rows per individual, one per week.
+   - `id`          — niffler ID
+   - `date`        — week start date
+   - `treasure_g`  — treasure haul that week (grams)
+   - `site`        — location that week (may match capture site)
+
+3. **Recruitment data**: `nifflers_recruitment.csv`  
+   Annual breeding data for females.
+   - `id`          — female niffler ID
+   - `year`        — year
+   - `offspring`   — number of offspring produced that year
+  
+
+## Step 1: Import raw data, clean and standardize variables
+   
+We will start by reading in our raw data: three CSV files containing niffler 
+capture, treasure, and recruitment data. To see the code that generated this 
+data, see `Scripts/niffler_data_simulation.R` in the scripts folder. 
+
+### Your tasks:
+1. Use `read_csv()` to import all three files into objects named **capture**, 
+**treasure**, and **recruitment**.
+2. Use `glimpse()` to look at each data frame.  
+3. Identify at least **two issues** in each table (wrong types, missing data, 
+odd site names, etc.).
+
+Use the code block below to work:
+
+```{r import_dat}
+# 1. Use read_csv() to import the 3 data files
+
+
+
+# 2. Use glimpse() to inspect each data frame
+
+```
+
+Our raw data contains:
+- Inconsistent site names  
+- Missing values  
+- Outliers  
+- Years stored as characters  
+- Other issues that will break analysis  
+
+We will clean each table separately.
+
+### Your tasks:
+For the **capture** data:
+1. Convert `capture_year` into a numeric variable.  
+2. Fix messy/inconsistent `site` values.  
+3. Convert `sex` into a factor.  
+4. Examine missing values in `age` and `weight_g`.  
+5. Identify and handle extreme outliers (your choice how).
+
+For the **treasure** data:
+1. Convert `date` to a Date object.  
+2. Standardize `site` names so they match the capture data.  
+3. Check missing values in `treasure_g`.  
+4. Inspect how many weeks per year are recorded for each ID.
+
+For the **recruitment** data:
+1. Convert `year` to numeric.  
+2. Inspect missing values in `offspring`.  
+3. Check for outliers.
+
+Use the code block below to complete each step.
+
+```{r clean}
+# Clean capture data here
+
+
+# Clean treasure data here
+
+
+# Clean recruitment data here
+
+
+```
+
+
+## Step 2: Join tables together
+
+After cleaning, we can combine tables:
+
+1. Join capture + treasure using `id`.
+2. Then join recruitment to the yearly treasure summaries.
+3. Make sure all joins behave as expected (no duplicates, no dropped rows).
+
+### Your tasks:
+1. Create a capture–treasure joined table using `left_join()`.  
+2. Inspect how many rows each dataset has before and after joining.  
+3. Create a full dataset combining capture, treasure, and recruitment.  
+4. Check for:
+   - Duplicate IDs
+   - Missing values introduced during joins
+   - Sites that still don’t match
+
+Use the scaffold code block below:
+
+```{r joins}
+# 1. Join capture + treasure
+
+
+
+
+
+
+# 2. Join recruitment
+
+
+
+
+# 3. Inspect results
+
+
+```
+
+
+## Step 3: Derived variables and summaries
+
+Now we summarize the data to prepare for plots and analysis.
+
+### Your tasks:
+1. Create a **year** variable in the treasure table using `year(date)`.  
+2. Summarize weekly treasure into **mean treasure per ID per year**.  
+3. In the full dataset, create `age_current` (age at the time of recruitment).  
+4. Create at least two summary tables you think might be useful—for example:
+   - Mean treasure by site  
+   - Number of offspring per year  
+   - Mean weight by sex  
+   - Treasure vs age summaries  
+
+Use the code block below. 
+
+```{r summaries}
+# Create yearly treasure summaries
+
+
+
+
+# Create age_current
+
+
+
+
+# Create 2 summaries you find useful
+
+
+```
