@@ -12,7 +12,7 @@ the software that runs R code. RStudio is a software interface that can make it
 easier to interact with the R software. We are going to start with a brief 
 description of all the panes. Feel free to take notes here if you want. 
 
-
+A change of text
 
 At this point, we have covered version control with Git, and you should have 
 been able to clone this repository. This repository is set up as an R Project. 
